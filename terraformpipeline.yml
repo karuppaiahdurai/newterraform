@@ -1,1 +1,63 @@
+trigger:
+- main
+
+stages:
+- stage: Build
+  displayName: 'Terraform Build'
+  jobs:
+  - job: BuildJob
+    displayName: 'Terraform Build Job'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: TerraformInstaller@0
+      inputs:
+        terraformVersion: 'latest'
+
+    - script: |
+        terraform init
+        terraform validate
+      displayName: 'Terraform Init and Validate'
+
+    - script: |
+        terraform plan -out=tfplan
+      displayName: 'Terraform Plan'
+
+    - publish: tfplan
+      artifact: tfplan-artifact
+      displayName: 'Publish Terraform Plan Artifact'
+
+- stage: Approval
+  displayName: 'Approval Stage'
+  dependsOn: Build
+  condition: succeeded('Build')
+  jobs:
+  - job: ApprovalJob
+    displayName: 'Manual Approval'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: ManualValidation@0
+      inputs:
+        notifyUsers: '<YourEmail>'
+        instructions: 'Please approve to continue with the deployment.'
+
+- stage: Deploy
+  displayName: 'Terraform Deployment'
+  dependsOn: Approval
+  condition: succeeded('Approval')
+  jobs:
+  - job: DeployJob
+    displayName: 'Terraform Deploy Job'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - download: current
+      artifact: tfplan-artifact
+      displayName: 'Download Terraform Plan Artifact'
+
+    - script: |
+        terraform init
+        terraform apply tfplan
+      displayName: 'Terraform Apply'
 
